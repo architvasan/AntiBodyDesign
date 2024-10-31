@@ -4,8 +4,10 @@ import pandas as pd
 import os
 import src.utils.cif2pdb as cif2pdb
 import MDAnalysis as mda
-
 import src.utils.fix_rfdiff_out as fix_rfdiff
+import src.utils.seq_frompdb as seq_frompdb
+import glob
+import src.analyze.lie as lie
 
 '''
 Steps:
@@ -172,7 +174,6 @@ def run_pipeline_single(rowit,
         print(command)
         os.system(command)
 
-       
         '''
         step 6 alternative
         use chai-1 to obtain new structure
@@ -180,8 +181,57 @@ def run_pipeline_single(rowit,
         2. for each pdb: determine sequence using seq tool
         3. for each sequence: plug sequence into chai-1 to determine final fold
         '''
-        
 
+        '''
+        step 6.1
+        '''
+        command = f"""\
+                  module use /soft/modulefiles &&\
+                  module load conda &&\
+                  cd {rf_dir} &&\
+                  conda activate /lus/eagle/projects/datascience/avasan/envs/proteinmpnn_binder_design &&\
+                  /eagle/projects/datascience/avasan/RFDiffusionProject/dl_binder_design/include/silent_tools/silentextract\
+                  mpnnout.silent &&\
+                  cd /eagle/datascience/avasan/Simulations/Antibody_Design\
+                  """
+        print(command)
+        os.system(command)
+
+        '''
+        step 6.2
+        for each pdb with ending *cycle1.pdb:
+        use src/utils/seq_frompdb.py
+        '''
+        mpnn_pdbs = glob.glob(f"{rf_dir}/*cycle*pdb")
+        seq_dict = {'chainA':[], 'chainB':[], 'coulen':[], 'ljen':[]}
+        for it_f, pdb_it in enumerate(mpnn_pdbs):
+            seq_new = get_seq_from_pdb(pdb_it)
+            seq_dict['chainA'].append(seq_new[0])
+            seq_dict['chainB'].append(seq_new[1])
+            print(seq_new)
+            seq_dict[it_f] = seq_new
+            os.mkdir(f'{rf_dir}/chai_struct_{it_f}')
+            chai_pred.fold_chai(
+                    seq_new[0],
+                    seq_new[1],
+                    f'{rf_dir}/chai_struct_{it_f}/temp.fasta',
+                    f'{rf_dir}/chai_struct_{it_f}',
+                    device=0
+                    )
+
+        '''
+        step 7
+        evaluate interaction energy for each generated structure
+        '''
+        for it_f, _ in enumerate(mpnn_pdbs):
+            coul_en, lj_en = lie(f'{rf_dir}/chai_struct_{it_f}/pred.model_idx_0.pdb',
+                                f'{rf_dir}/chai_struct_{it_f}/fixed_0.pdb',
+                                chaintarget,
+                                rid_init,
+                                rid_fin,
+                                )
+            seq_dict['coulen'].append(coul_en)
+            seq_dict['lj_en'].append(lj_en)
 
         if False:
             '''
@@ -214,7 +264,11 @@ def run_pipeline_single(rowit,
 
             print(command)
             os.system(command)
-       
+            
+            '''
+            step 6.2
+            '''
+            return seq_new, coul_en, lj_en
 
 
 def run_pipeline(datafile,
