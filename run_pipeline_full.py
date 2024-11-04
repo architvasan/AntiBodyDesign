@@ -13,20 +13,24 @@ import src.rfdiffrun.fixrfpdb_seq as fixrfpdb_seq
 import src.rfdiffrun.silenttools as silenttools
 import src.rfdiffrun.dlbinder as dlbinder
 import src.analyze.md_energy as md_energy
-
+import src.utils.truncate as truncate
+import src.utils.len_chains_pdb as len_chains
 '''
 Steps:
 0. Load in pandas dataframe
 1. Determine sequencs for light + heavy chains + antigens
 2. Determine resid numbers for CDR loop to target
 3. Load light + heavy chains into CHAI-1
-4. Load CHAI-1 structure into rfdiffusion to generate new CDR loops with partial diff
+3.1 Analyze md energy for generated structure
+4.1 Truncate CHAI-1 structure to all residues within 15 A of CDR loop 
+4. Load truncated CHAI-1 structure into rfdiffusion 
+    to generate new CDR loops with partial diff
 4.1 Fix residues with known sequences.
 4.2 Convert pdbs in directory to .silent file
 5 Load rfdiffusion .silent file into dl binder design
 6. Load dlbind design sequence into CHAI-1
 6.1 Convert .silent files back to .pdb
-8. Run a short MD simulation for each structure
+8. Run a short MD/minimization simulation for each structure
 9. Determine interaction energy + md energy from each simulation
 '''
 
@@ -40,6 +44,16 @@ def run_pipeline_single(rowit,
                         num_designs,
                         se3_env,
                         dlbind_env):
+
+    seq_dict = {'it': [],
+                'chainA': [], 
+                'chainB': [],
+                'antigen': [],
+                'coulen': [],
+                'ljen': [],
+                'mden': [],
+                'struct': []}
+
     '''
     step 1
     '''
@@ -47,11 +61,15 @@ def run_pipeline_single(rowit,
     data_it_heavy = data_it['heavy_chain']
     data_it_light = data_it['light_chain']
     data_it_ant = data_it['antigen']
+    
+    seq_dict['it'].append(0)
+    seq_dict['chainA'].append(data_it_heavy)
+    seq_dict['chainB'].append(data_it_light)
+    seq_dict['antigen'].append(data_it_ant)
 
     '''
     step 2
     '''
-    #data_it_ant = data_it['antigen']
     data_it_target = data_it[chaintarget]
     data_it_patt = data_it[cdrloop]
     rid_init = data_it_target.find(data_it_patt)
@@ -74,7 +92,22 @@ def run_pipeline_single(rowit,
         use cif2pdb util to convert cif to pdb
         '''
         cif2pdb.cif2pdb(f'{chai_dir}/pred.model_idx_0.cif')
+    seq_dict['struct'].append(f'{chai_dir}/pred.model_idx_0.pdb')
+    coul_en, lj_en = lie.lie(f'{chai_dir}/pred.model_idx_0.pdb',
+                        f'{chai_dir}/fixed_0.pdb',
+                        chaintarget,
+                        rid_init,
+                        rid_fin,
+                        )
 
+    md_en = md_energy.calculate_md_energy(
+                        f'{chai_dir}/fixed_0.pdb',
+                        )
+    seq_dict['coulen'].append(coul_en)
+    seq_dict['ljen'].append(lj_en)
+    seq_dict['mden'].append(md_en)
+    print(seq_dict)
+    
     '''
     step 4
     Construct and execute the command
@@ -82,15 +115,28 @@ def run_pipeline_single(rowit,
     Will modify for light chain later
     '''
 
-    len_heavy = len(list(data_it_heavy))
-    len_light = len(list(data_it_light))
-    len_ant = len(list(data_it_ant))
+    '''
+    step 4.1
+    truncate system to 15 A within cdrloop
+    '''
+    residue_mapping = truncate.truncate_pdb(
+                            f'{chai_dir}/pred.model_idx_0.pdb',
+                            f'chain A and resi {rid_init}-{rid_fin}',
+                            f'{chai_dir}/pred_0_truncated.pdb',
+                            )
+    
+    rid_init_truncated = residue_mapping[('A', rid_init)]
+    rid_fin_truncated = residue_mapping[('A', rid_fin)]
+
+    len_heavy = len_chains.count_residues_in_chain(f'{chai_dir}/pred_0_truncated.pdb', 'A')
+    len_light = len_chains.count_residues_in_chain(f'{chai_dir}/pred_0_truncated.pdb', 'B')
+    len_ant = len_chains.count_residues_in_chain(f'{chai_dir}/pred_0_truncated.pdb', 'C')
     
     partial_loop.rfdiff_full(
           f'{chai_dir}/pred.model_idx_0.pdb',
           rf_dir,
-          rid_init,
-          rid_fin,
+          rid_init_truncated,
+          rid_fin_truncated,
           len_heavy,
           len_light,
           len_ant,
@@ -134,7 +180,6 @@ def run_pipeline_single(rowit,
                             '/eagle/projects/datascience/avasan/RFDiffusionProject/dl_binder_design/include/silent_tools',
                             )
 
-
     '''
     step 5
     '''
@@ -165,18 +210,18 @@ def run_pipeline_single(rowit,
     use src/utils/seq_frompdb.py
     '''
     mpnn_pdbs = glob.glob(f"{rf_dir}/*cycle*pdb")
-    seq_dict = {'chainA': [], 
-                'chainB': [],
-                'coulen': [],
-                'ljen': [],
-                'mden': []}
 
     for it_f, pdb_it in enumerate(mpnn_pdbs):
         seq_new = seq_frompdb.get_seq_from_pdb(pdb_it)
-        seq_dict['chainA'].append(seq_new[0])
-        seq_dict['chainB'].append(seq_new[1])
-        print(seq_new)
-        seq_dict[it_f] = seq_new
+        cdrnew_list = seq_new['chainA'][rid_init_truncated:rid_fin_truncated]
+        cdrnew = "".join(cdrnew_list)
+        seq_A_new = data_it_heavy[:rid_init] + cdrnew + data_it_heavy[rid_fin:] 
+        seq_dict['it'].append(it_f + 1)
+        seq_dict['chainA'].append(seq_A_new)
+        seq_dict['chainB'].append(data_it_light)
+        seq_dict['antigen'].append(data_it_ant)
+        print(seq_dict)
+
         try:
             os.mkdir(f'{rf_dir}/chai_struct_{it_f}')
         except:
@@ -189,6 +234,7 @@ def run_pipeline_single(rowit,
                 device=0
                 )
         cif2pdb.cif2pdb(f'{rf_dir}/chai_struct_{it_f}/pred.model_idx_0.cif')
+        seq_dict['struct'].append(f'{rf_dir}/chai_struct_{it_f}/pred.model_idx_0.pdb')
 
     '''
     step 7
@@ -251,7 +297,7 @@ def run_pipeline(datafile,
                         num_designs,
                         se3_env,
                         dlbind_env)
-
+        print(seq_dict)
         df_seq = pd.DataFrame(seq_dict)
         df_seq.to_csv(f'seq_{rowit}.csv', index=False)
 
