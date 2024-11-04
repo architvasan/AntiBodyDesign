@@ -66,8 +66,8 @@ def truncate_pdb(pdb_file,
         pymol.cmd.load(pdb_file, "protein")
         
         # Select residues within the distance cutoff
-        pymol.cmd.select("close_residues", f"byres (br. ({selection}) within {distance_cutoff})")
-        
+        pymol.cmd.select("close_residues", f"({selection}) or byres br. (({selection}) around {distance_cutoff})")
+        #pymol.cmd.select("close_residues", f"byres br. ((chain a and resi 98-127) around 15) ")
         # Extract and save the selection to a temporary object
         pymol.cmd.create("truncated_protein", "close_residues")
         

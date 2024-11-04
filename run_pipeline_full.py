@@ -92,6 +92,7 @@ def run_pipeline_single(rowit,
         use cif2pdb util to convert cif to pdb
         '''
         cif2pdb.cif2pdb(f'{chai_dir}/pred.model_idx_0.cif')
+
     seq_dict['struct'].append(f'{chai_dir}/pred.model_idx_0.pdb')
     coul_en, lj_en = lie.lie(f'{chai_dir}/pred.model_idx_0.pdb',
                         f'{chai_dir}/fixed_0.pdb',
@@ -124,16 +125,17 @@ def run_pipeline_single(rowit,
                             f'chain A and resi {rid_init}-{rid_fin}',
                             f'{chai_dir}/pred_0_truncated.pdb',
                             )
+    print(residue_mapping)
     
-    rid_init_truncated = residue_mapping[('A', rid_init)]
-    rid_fin_truncated = residue_mapping[('A', rid_fin)]
+    rid_init_truncated = residue_mapping[('A', str(rid_init))]
+    rid_fin_truncated = residue_mapping[('A', str(rid_fin))]
 
     len_heavy = len_chains.count_residues_in_chain(f'{chai_dir}/pred_0_truncated.pdb', 'A')
     len_light = len_chains.count_residues_in_chain(f'{chai_dir}/pred_0_truncated.pdb', 'B')
     len_ant = len_chains.count_residues_in_chain(f'{chai_dir}/pred_0_truncated.pdb', 'C')
     
     partial_loop.rfdiff_full(
-          f'{chai_dir}/pred.model_idx_0.pdb',
+          f'{chai_dir}/pred_0_truncated.pdb',
           rf_dir,
           rid_init_truncated,
           rid_fin_truncated,
