@@ -1,9 +1,7 @@
 #import src.utils.id_cdrloop as cdrloop
 import src.fold_ai.chai_pred as chai_pred
-import pandas as pd
 import os
 import src.utils.cif2pdb as cif2pdb
-import MDAnalysis as mda
 import src.utils.fix_rfdiff_out as fix_rfdiff
 import src.utils.seq_frompdb as seq_frompdb
 import glob
@@ -15,9 +13,8 @@ import src.rfdiffrun.dlbinder as dlbinder
 import src.analyze.md_energy as md_energy
 import src.utils.truncate as truncate
 import src.utils.len_chains_pdb as len_chains
-import src.utils.loaddict_pickle as loaddict
+import pandas as pd
 from mpi4py import MPI
-import pickle
 
 '''
 Running in parallel using mpi4py
@@ -254,11 +251,13 @@ def run_pipeline_single(
         seq_dict['chainA'].append(seq_A_new)
         seq_dict['chainB'].append(data_it_light)
         seq_dict['antigen'].append(data_it_ant)
+        seq_dict['cdrseq'].append(cdrnew)
 
         try:
             os.mkdir(f'{rf_dir}/chai_struct_{it_f}')
         except:
             pass
+
         chai_pred.fold_chai_body_ant(
                             seq_A_new,
                             data_it_light,
@@ -273,7 +272,7 @@ def run_pipeline_single(
 
         '''
         step 7
-        evaluate interaction energy for each generated structure
+        evaluate interaction + md energy for each generated structure
         '''
         coul_en, lj_en = lie.lie(f'{rf_dir}/chai_struct_{it_f}/pred.model_idx_0.pdb',
                             f'{rf_dir}/chai_struct_{it_f}/fixed_0.pdb',
@@ -285,15 +284,13 @@ def run_pipeline_single(
         md_en = md_energy.calculate_md_energy(
                             f'{rf_dir}/chai_struct_{it_f}/fixed_0.pdb',
                             )
+
         seq_dict['coulen'].append(coul_en)
         seq_dict['ljen'].append(lj_en)
         seq_dict['mden'].append(md_en)
         print(seq_dict)
 
     return seq_dict 
-
-
-
 
 def run_pipeline_parallel(
                 datafile,
@@ -360,9 +357,6 @@ def run_pipeline_parallel(
         df_seq = pd.DataFrame(seq_dict)
         df_seq.to_csv(f'{log_dir_it}/seq_{rowit}_{cdrloop}.csv', index=False)
 
-
-
-
 if __name__ =="__main__":
     import argparse
     parser = argparse.ArgumentParser()
@@ -385,6 +379,11 @@ if __name__ =="__main__":
                         '--logout',
                         type=str,
                         help='directory to store log info (seqs, energies)')
+
+    parser.add_argument('-M',
+                        '--mapdir',
+                        type=str,
+                        help='directory where resmaps from truncation are')
 
     parser.add_argument('-N',
                         '--ndesigns',
