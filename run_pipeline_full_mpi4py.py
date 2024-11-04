@@ -310,7 +310,7 @@ def chai_folding_seq(
              'mden': md_en,
              'struct': f'{chai_dir}/pred.model_idx_0.pdb'}         
         comm.Barrier()
-    return seq_dict
+    return seq_dict, residue_mapping
     
 def run_pipeline_parallel(
                 datafile,
@@ -336,7 +336,6 @@ def run_pipeline_parallel(
     dlbind_env = "/lus/eagle/projects/datascience/avasan/envs/proteinmpnn_binder_design"
 
     for rowit in range(1):#len(data)):
-        # test with heavy_cdr3 without antigen
         chai_dir_it = f'{chai_dir}/{rowit}'
         rf_dir_it = f'{rf_dir}/{rank}_{rowit}'
         log_dir_it = f'{log_dir}/{rank}_{rowit}'
@@ -359,20 +358,22 @@ def run_pipeline_parallel(
         cdrloop = "heavy_cdr3"
         chaintarget = "heavy_chain"
 
-        truncated_res_map = truncate.open_resmap(f"{res_map_loc}/resmap_{rowit}.pkl")
-
         if fold_init == True:
-            chai_folding_seq(
-                    data,
-                    rowit,
-                    chai_dir,
-                    chaintarget,
-                    cdrloop,
-                    res_map_loc,
-                    rank,
-                    comm)
+            seq_dict_init, truncated_res_map = chai_folding_seq(
+                                    data,
+                                    rowit,
+                                    chai_dir,
+                                    chaintarget,
+                                    cdrloop,
+                                    res_map_loc,
+                                    rank,
+                                    comm)
+            seq_init_df = pd.DataFrame([seq_dict_init])
+            seq_init_df.to_csv(f'{log_dir_it}/seq_initial_{rowit}_{cdrloop}.csv', index=False)
+
         else:
-            pass
+            truncated_res_map = truncate.open_resmap(f"{res_map_loc}/resmap_{rowit}.pkl")
+
         
         seq_dict = run_pipeline_single(
                         rowit,
