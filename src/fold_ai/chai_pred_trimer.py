@@ -5,7 +5,7 @@ import torch
 
 from chai_lab.chai1 import run_inference
 
-def fold_chai_body_ant(s1,
+def fold_chai(s1,
               s2,
               s3,
               fastapath,
@@ -43,41 +43,6 @@ def fold_chai_body_ant(s1,
     return scores
 
 
-def fold_chai(s1,
-              s2,
-              fastapath,
-              outputdir,
-              device=0,
-              ):
-
-    fasta = f"""
-    >protein|name=prot1
-{s1}
->protein|name=prot2
-{s2}
-    """.strip()
-    
-    fasta_path = Path(fastapath)
-    fasta_path.write_text(fasta)
-    output_dir = Path(outputdir)
-
-    candidates = run_inference(
-        fasta_file=fasta_path,
-        output_dir=output_dir,
-        # 'default' setup
-        num_trunk_recycles=3,
-        num_diffn_timesteps=200,
-        seed=42,
-        device=torch.device(f"cuda:{device}"),
-        use_esm_embeddings=True,
-    )
-
-    cif_paths = candidates.cif_paths
-    scores = [rd.aggregate_score for rd in candidates.ranking_data]
-    scores = np.load(output_dir.joinpath("scores.model_idx_2.npz"))
-    return scores
-
-
 if __name__ == "__main__": 
     import argparse
     parser = argparse.ArgumentParser()
@@ -98,6 +63,13 @@ if __name__ == "__main__":
                         required=False,
                         default="none",
                         help='Sequence 2')
+
+    parser.add_argument('-s3',
+                        '--seq3',
+                        type=str,
+                        required=False,
+                        default="none",
+                        help='Sequence 3')
 
     parser.add_argument('-od',
                         '--outdir',
@@ -138,6 +110,7 @@ if __name__ == "__main__":
         scores = fold_chai(
                 args.seq1,
                 args.seq2,
+                args.seq3,
                 args.fastapath,
                 args.outdir,
                 )
@@ -152,9 +125,16 @@ if __name__ == "__main__":
         else:
             seq2_str = args.seq2
 
+        if args.seq3 != "none":
+            with open(args.seq3, 'r') as file:
+                seq3_str = file.read().replace('\n', '')
+        else:
+            seq3_str = args.seq3
+
         scores = fold_chai(
                 seq1_str,
                 seq2_str,
+                seq3_str,
                 args.fastapath,
                 args.outdir,
                 )

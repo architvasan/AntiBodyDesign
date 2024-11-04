@@ -25,10 +25,21 @@ def get_seq_from_pdb( pdb_fn ) -> str:
             seqstr += to1letter[resName]
 
     return seq
-    :wqa
 
+if __name__ == "__main__":
 
+    def list_of_strings(arg):
+        return arg.split(',')
 
+    import argparse
+    parser = argparse.ArgumentParser()
 
+    parser.add_argument('-p',
+                        '--inputpdb',
+                        type=str,
+                        help='input pdb with protein')
 
-
+    args = parser.parse_args()
+    
+    seq = get_seq_from_pdb(args.inputpdb)
+    print(seq)
