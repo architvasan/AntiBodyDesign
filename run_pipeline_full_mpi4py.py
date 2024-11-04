@@ -29,13 +29,15 @@ def initialize_mpi(gpu_per_node):
     return comm, size, rank, device
 
 '''
-Steps:
+Single rank steps:
+1. Load light + heavy chains into CHAI-1
+2. Analyze md energy for generated structure
+3. Truncate CHAI-1 structure to all residues within 15 A of CDR loop 
+
+Parallel Steps:
 0. Load in pandas dataframe
 1. Determine sequencs for light + heavy chains + antigens
 2. Determine resid numbers for CDR loop to target
-3. Load light + heavy chains into CHAI-1
-3.1 Analyze md energy for generated structure
-4.1 Truncate CHAI-1 structure to all residues within 15 A of CDR loop 
 4. Load truncated CHAI-1 structure into rfdiffusion 
     to generate new CDR loops with partial diff
 4.1 Fix residues with known sequences.
@@ -78,80 +80,31 @@ def run_pipeline_single(
     data_it_heavy = data_it['heavy_chain']
     data_it_light = data_it['light_chain']
     data_it_ant = data_it['antigen']
-    
-    # seq_dict['it'].append(0)
-    # seq_dict['chainA'].append(data_it_heavy)
-    # seq_dict['chainB'].append(data_it_light)
-    # seq_dict['antigen'].append(data_it_ant)
-    # seq_dict['cdrtarget'].append(cdrloop)
 
     '''
     step 2
     '''
     data_it_target = data_it[chaintarget]
     data_it_patt = data_it[cdrloop]
-    # seq_dict['cdrseq'].append(data_it_patt)
 
     rid_init = data_it_target.find(data_it_patt)
     rid_fin = rid_init + len(data_it_patt)
 
-    if False:
-        '''
-        step 3
-        '''
-        chai_pred.fold_chai_body_ant(
-                            data_it_heavy,
-                            data_it_light,
-                            data_it_ant,
-                            f'{chai_dir}/temp.fasta',
-                            chai_dir,
-                            device=0
-                            )
-        '''
-        step 3.1
-        use cif2pdb util to convert cif to pdb
-        '''
-        cif2pdb.cif2pdb(f'{chai_dir}/pred.model_idx_0.cif')
-
-    # seq_dict['struct'].append(f'{chai_dir}/pred.model_idx_0.pdb')
     if chaintarget == 'heavy_chain':
         chain_use = 'A'
     elif chaintarget == 'light_chain':
         chain_use = 'B'
 
-    # coul_en, lj_en = lie.lie(f'{chai_dir}/pred.model_idx_0.pdb',
-    #                     f'{chai_dir}/fixed_0.pdb',
-    #                     chain_use,
-    #                     rid_init,
-    #                     rid_fin,
-    #                     )
-
-    # md_en = md_energy.calculate_md_energy(
-    #                     f'{chai_dir}/fixed_0.pdb',
-    #                     )
-
-    # seq_dict['coulen'].append(coul_en)
-    # seq_dict['ljen'].append(lj_en)
-    # seq_dict['mden'].append(md_en)
-    # print(seq_dict)
     
     '''
-    step 4
+    step 3
     Construct and execute the command
+    Use truncated system here
+    Use preloaded residue mapping dictionary
     * Assume for now that we are dealing with heavy chain.
     Will modify for light chain later
     '''
-
-    '''
-    step 4.1
-    truncate system to 15 A within cdrloop
-    '''
-    # residue_mapping = truncate.truncate_pdb(
-    #                         f'{chai_dir}/pred.model_idx_0.pdb',
-    #                         f'chain A and resi {rid_init}-{rid_fin}',
-    #                         f'{chai_dir}/pred_0_truncated.test.pdb',
-    #                         )
-    
+        
     print("residue mapping is:")
     print(residue_mapping)
 
@@ -289,9 +242,76 @@ def run_pipeline_single(
         seq_dict['ljen'].append(lj_en)
         seq_dict['mden'].append(md_en)
         print(seq_dict)
-
     return seq_dict 
 
+def chai_folding_seq(
+                    data,
+                    rowit,
+                    chai_dir,
+                    chaintarget,
+                    cdrloop,
+                    map_dir,
+                    rank,
+                    comm):
+
+    if rank==0:
+        data_it = data.loc[rowit]
+        data_it_heavy = data_it['heavy_chain']
+        data_it_light = data_it['light_chain']
+        data_it_ant = data_it['antigen']
+        chai_pred.fold_chai_body_ant(
+                            data_it_heavy,
+                            data_it_light,
+                            data_it_ant,
+                            f'{chai_dir}/temp.fasta',
+                            chai_dir,
+                            device=0
+                            )
+        '''
+        use cif2pdb util to convert cif to pdb
+        '''
+        cif2pdb.cif2pdb(f'{chai_dir}/pred.model_idx_0.cif')
+
+        if chaintarget == 'heavy_chain':
+             chain_use = 'A'
+        elif chaintarget == 'light_chain':
+             chain_use = 'B'
+        data_it_target = data_it[chaintarget]
+        data_it_patt = data_it[cdrloop]
+
+        rid_init = data_it_target.find(data_it_patt)
+        rid_fin = rid_init + len(data_it_patt)
+
+        coul_en, lj_en = lie.lie(f'{chai_dir}/pred.model_idx_0.pdb',
+                              f'{chai_dir}/fixed_0.pdb',
+                              chain_use,
+                              rid_init,
+                              rid_fin,
+                              )
+
+        md_en = md_energy.calculate_md_energy(
+                            f'{chai_dir}/fixed_0.pdb',
+                            )
+
+        residue_mapping = truncate.truncate_pdb(
+                                f'{chai_dir}/pred.model_idx_0.pdb',
+                                f'chain A and resi {rid_init}-{rid_fin}',
+                                f'{chai_dir}/pred_0_truncated.test.pdb',
+                                )
+        truncate.save_resmap(residue_mapping, f'{map_dir}/seq_{rowit}_{cdrloop}.csv')
+
+        seq_dict = {'it': rowit,
+             'chainA': data_it_heavy, 
+             'chainB': data_it_light,
+             'antigen': data_it_ant,
+             'cdrseq': data_it_patt,
+             'coulen': coul_en,
+             'ljen': lj_en,
+             'mden': md_en,
+             'struct': f'{chai_dir}/pred.model_idx_0.pdb'}         
+        comm.Barrier()
+    return seq_dict
+    
 def run_pipeline_parallel(
                 datafile,
                 chai_dir,
@@ -299,7 +319,8 @@ def run_pipeline_parallel(
                 log_dir,
                 res_map_loc,
                 num_designs,
-                gpu_per_node=4):
+                gpu_per_node=4,
+                fold_init = False):
 
     '''
     Initialize mpi rank + device index
@@ -340,6 +361,19 @@ def run_pipeline_parallel(
 
         truncated_res_map = truncate.open_resmap(f"{res_map_loc}/resmap_{rowit}.pkl")
 
+        if fold_init == True:
+            chai_folding_seq(
+                    data,
+                    rowit,
+                    chai_dir,
+                    chaintarget,
+                    cdrloop,
+                    res_map_loc,
+                    rank,
+                    comm)
+        else:
+            pass
+        
         seq_dict = run_pipeline_single(
                         rowit,
                         data,
@@ -399,6 +433,12 @@ if __name__ =="__main__":
                          default=4,
                          help='number of gpus on a single node')
 
+    parser.add_argument('-F',                              
+                         '--foldit',
+                         type=bool,
+                         required=False,
+                         default=False,
+                         help='should we fold the initial sequence (True) or is it prefolded? (False)')
 
     args = parser.parse_args()
 
