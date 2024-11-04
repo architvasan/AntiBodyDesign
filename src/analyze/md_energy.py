@@ -48,7 +48,7 @@ def calculate_md_energy(pdb_file):
     potential_energy = state.getPotentialEnergy()
     
     print(f"Potential Energy: {potential_energy.value_in_unit(unit.kilocalories_per_mole)} kcal/mol")
-    return potential_energy
+    return potential_energy.value_in_unit(unit.kilocalories_per_mole)
 
 if __name__ == "__main__": 
     import argparse

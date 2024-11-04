@@ -79,7 +79,7 @@ def lie(inppdb,
     solvent_lj = energy(context, 0, 0, 0, 1)
     coul_final = total_coulomb - solute_coulomb - solvent_coulomb
     lj_final = total_lj - solute_lj - solvent_lj
-    return coul_final, lj_final 
+    return coul_final.value_in_unit(kilocalories_per_mole), lj_final.value_in_unit(kilocalories_per_mole)
 
 
 if __name__ == "__main__": 

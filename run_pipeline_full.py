@@ -123,7 +123,7 @@ def run_pipeline_single(rowit,
     residue_mapping = truncate.truncate_pdb(
                             f'{chai_dir}/pred.model_idx_0.pdb',
                             f'chain A and resi {rid_init}-{rid_fin}',
-                            f'{chai_dir}/pred_0_truncated.pdb',
+                            f'{chai_dir}/pred_0_truncated.test.pdb',
                             )
     print(residue_mapping)
     
@@ -134,77 +134,78 @@ def run_pipeline_single(rowit,
     len_light = len_chains.count_residues_in_chain(f'{chai_dir}/pred_0_truncated.pdb', 'B')
     len_ant = len_chains.count_residues_in_chain(f'{chai_dir}/pred_0_truncated.pdb', 'C')
     
-    partial_loop.rfdiff_full(
-          f'{chai_dir}/pred_0_truncated.pdb',
-          rf_dir,
-          rid_init_truncated,
-          rid_fin_truncated,
-          len_heavy,
-          len_light,
-          len_ant,
-          rf_script_path,
-          se3_env,
-          partial_steps=10,
-          num_designs=num_designs,
-          )
+    if False:
+        partial_loop.rfdiff_full(
+              f'{chai_dir}/pred_0_truncated.pdb',
+              rf_dir,
+              rid_init_truncated,
+              rid_fin_truncated,
+              len_heavy,
+              len_light,
+              len_ant,
+              rf_script_path,
+              se3_env,
+              partial_steps=10,
+              num_designs=num_designs,
+              )
 
-    '''
-    step 4.15
-    move any residue with > len(heavy_chain) to chain B + > len(heavy_chain+light_chain) to chain C
-    '''
-    for file in os.listdir(rf_dir):
-        print(file)
-        if file.endswith(".pdb"):
+        '''
+        step 4.15
+        move any residue with > len(heavy_chain) to chain B + > len(heavy_chain+light_chain) to chain C
+        '''
+        for file in os.listdir(rf_dir):
             print(file)
-            pdb_path = os.path.join(rf_dir, file)
-            fix_rfdiff.modify_chain_full(pdb_path,
-                                         len_heavy,
-                                         len_light,
-                                        )
+            if file.endswith(".pdb"):
+                print(file)
+                pdb_path = os.path.join(rf_dir, file)
+                fix_rfdiff.modify_chain_full(pdb_path,
+                                             len_heavy,
+                                             len_light,
+                                            )
 
-    '''
-    step 4.1
-    fix residues in pdb 
-    '''
+        '''
+        step 4.1
+        fix residues in pdb 
+        '''
 
-    fixrfpdb_seq.fixpdb(rf_dir,
-                        dlbind_env,
-                        '/eagle/projects/datascience/avasan/RFDiffusionProject/dl_binder_design/helper_scripts',
-                        )
-    
-    '''
-    step 4.2
-    convert pdb to silent
-    '''
-
-    silenttools.pdb2silent(dlbind_env,
-                            rf_dir,
-                            '/eagle/projects/datascience/avasan/RFDiffusionProject/dl_binder_design/include/silent_tools',
+        fixrfpdb_seq.fixpdb(rf_dir,
+                            dlbind_env,
+                            '/eagle/projects/datascience/avasan/RFDiffusionProject/dl_binder_design/helper_scripts',
                             )
+    
+        '''
+        step 4.2
+        convert pdb to silent
+        '''
 
-    '''
-    step 5
-    '''
-    dlbinder.protein_mpnn(dlbind_env,
-                              '/eagle/projects/datascience/avasan/RFDiffusionProject/dl_binder_design/mpnn_fr',
-                              rf_dir)
+        silenttools.pdb2silent(dlbind_env,
+                                rf_dir,
+                                '/eagle/projects/datascience/avasan/RFDiffusionProject/dl_binder_design/include/silent_tools',
+                                )
 
-    '''
-    step 6 alternative
-    use chai-1 to obtain new structure
-    1. convert mpnnout.silent back to pdbs
-    2. for each pdb: determine sequence using seq tool
-    3. for each sequence: plug sequence into chai-1 to determine final fold
-    '''
+        '''
+        step 5
+        '''
+        dlbinder.protein_mpnn(dlbind_env,
+                                  '/eagle/projects/datascience/avasan/RFDiffusionProject/dl_binder_design/mpnn_fr',
+                                  rf_dir)
 
-    '''
-    step 6.1
-    '''
-    silenttools.extractpdb('/eagle/datascience/avasan/Simulations/Antibody_Design',
-                           dlbind_env,
-                           rf_dir,
-                           '/eagle/projects/datascience/avasan/RFDiffusionProject/dl_binder_design/include/silent_tools',
-                           )
+        '''
+        step 6 alternative
+        use chai-1 to obtain new structure
+        1. convert mpnnout.silent back to pdbs
+        2. for each pdb: determine sequence using seq tool
+        3. for each sequence: plug sequence into chai-1 to determine final fold
+        '''
+
+        '''
+        step 6.1
+        '''
+        silenttools.extractpdb('/eagle/datascience/avasan/Simulations/Antibody_Design',
+                               dlbind_env,
+                               rf_dir,
+                               '/eagle/projects/datascience/avasan/RFDiffusionProject/dl_binder_design/include/silent_tools',
+                               )
     
     '''
     step 6.2
@@ -215,34 +216,34 @@ def run_pipeline_single(rowit,
 
     for it_f, pdb_it in enumerate(mpnn_pdbs):
         seq_new = seq_frompdb.get_seq_from_pdb(pdb_it)
-        cdrnew_list = seq_new['chainA'][rid_init_truncated:rid_fin_truncated]
+        cdrnew_list = seq_new[0][rid_init_truncated:rid_fin_truncated]
         cdrnew = "".join(cdrnew_list)
         seq_A_new = data_it_heavy[:rid_init] + cdrnew + data_it_heavy[rid_fin:] 
         seq_dict['it'].append(it_f + 1)
         seq_dict['chainA'].append(seq_A_new)
         seq_dict['chainB'].append(data_it_light)
         seq_dict['antigen'].append(data_it_ant)
-        print(seq_dict)
 
         try:
             os.mkdir(f'{rf_dir}/chai_struct_{it_f}')
         except:
             pass
-        chai_pred.fold_chai(
-                seq_new[0],
-                seq_new[1],
-                f'{rf_dir}/chai_struct_{it_f}/temp.fasta',
-                f'{rf_dir}/chai_struct_{it_f}',
-                device=0
-                )
+        chai_pred.fold_chai_body_ant(
+                            seq_A_new,
+                            data_it_light,
+                            data_it_ant,
+                            f'{rf_dir}/chai_struct_{it_f}/temp.fasta',
+                            f'{rf_dir}/chai_struct_{it_f}',
+                            device=0
+                            )
+
         cif2pdb.cif2pdb(f'{rf_dir}/chai_struct_{it_f}/pred.model_idx_0.cif')
         seq_dict['struct'].append(f'{rf_dir}/chai_struct_{it_f}/pred.model_idx_0.pdb')
 
-    '''
-    step 7
-    evaluate interaction energy for each generated structure
-    '''
-    for it_f, _ in enumerate(mpnn_pdbs):
+        '''
+        step 7
+        evaluate interaction energy for each generated structure
+        '''
         coul_en, lj_en = lie.lie(f'{rf_dir}/chai_struct_{it_f}/pred.model_idx_0.pdb',
                             f'{rf_dir}/chai_struct_{it_f}/fixed_0.pdb',
                             chaintarget,
@@ -255,6 +256,8 @@ def run_pipeline_single(rowit,
         seq_dict['coulen'].append(coul_en)
         seq_dict['ljen'].append(lj_en)
         seq_dict['mden'].append(md_en)
+        print(seq_dict)
+
     return seq_dict 
 
 
