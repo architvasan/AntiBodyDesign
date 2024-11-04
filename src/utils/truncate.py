@@ -1,4 +1,15 @@
 import pymol2
+import pickle
+
+def open_resmap(pickle_file):
+    with open(pickle_file, 'rb') as f:
+        loaded_dict = pickle.load(f)
+    return loaded_dict
+
+def save_resmap(dictionary, outfile):
+    with open(outfile, 'wb') as f:
+        pickle.dump(dictionary, f)
+    return
 
 def _truncate_protein_to_nearby_residues(pdb_file, selection, output_file, distance_cutoff=15.0):
     with pymol2.PyMOL() as pymol:
@@ -127,6 +138,11 @@ if __name__ == "__main__":
                         type=str,
                         help='directory to output data')
 
+    parser.add_argument('-M',
+                        '--mapres_file',
+                        type=str,
+                        help='directory to store resmap dict')
+
     parser.add_argument('-d',
                         '--distance_cutoff',
                         type=float,
@@ -147,3 +163,4 @@ if __name__ == "__main__":
                  args.selection,
                  args.output_file,
                  distance_cutoff=args.distance_cutoff)
+    save_resmap(residue_mapping, args.mapres_file)

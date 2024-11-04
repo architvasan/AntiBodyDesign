@@ -15,6 +15,22 @@ import src.rfdiffrun.dlbinder as dlbinder
 import src.analyze.md_energy as md_energy
 import src.utils.truncate as truncate
 import src.utils.len_chains_pdb as len_chains
+import src.utils.loaddict_pickle as loaddict
+from mpi4py import MPI
+import pickle
+
+'''
+Running in parallel using mpi4py
+Just initialize MPI and 
+set CUDA Visible device according to rank
+'''
+def initialize_mpi(gpu_per_node):
+    comm = MPI.COMM_WORLD
+    size = comm.Get_size()
+    rank = comm.Get_rank()
+    device = rank % gpu_per_node 
+    return comm, size, rank, device
+
 '''
 Steps:
 0. Load in pandas dataframe
@@ -34,21 +50,25 @@ Steps:
 9. Determine interaction energy + md energy from each simulation
 '''
 
-def run_pipeline_single(rowit,
+def run_pipeline_single(
+                        rowit,
                         data,
                         cdrloop,
                         chaintarget,
                         chai_dir,
                         rf_dir,
+                        residue_mapping,
                         rf_script_path,
                         num_designs,
                         se3_env,
-                        dlbind_env):
+                        dlbind_env,
+                        ):
 
     seq_dict = {'it': [],
                 'chainA': [], 
                 'chainB': [],
                 'antigen': [],
+                'cdrseq': [],
                 'coulen': [],
                 'ljen': [],
                 'mden': [],
@@ -62,16 +82,19 @@ def run_pipeline_single(rowit,
     data_it_light = data_it['light_chain']
     data_it_ant = data_it['antigen']
     
-    seq_dict['it'].append(0)
-    seq_dict['chainA'].append(data_it_heavy)
-    seq_dict['chainB'].append(data_it_light)
-    seq_dict['antigen'].append(data_it_ant)
+    # seq_dict['it'].append(0)
+    # seq_dict['chainA'].append(data_it_heavy)
+    # seq_dict['chainB'].append(data_it_light)
+    # seq_dict['antigen'].append(data_it_ant)
+    # seq_dict['cdrtarget'].append(cdrloop)
 
     '''
     step 2
     '''
     data_it_target = data_it[chaintarget]
     data_it_patt = data_it[cdrloop]
+    # seq_dict['cdrseq'].append(data_it_patt)
+
     rid_init = data_it_target.find(data_it_patt)
     rid_fin = rid_init + len(data_it_patt)
 
@@ -93,26 +116,27 @@ def run_pipeline_single(rowit,
         '''
         cif2pdb.cif2pdb(f'{chai_dir}/pred.model_idx_0.cif')
 
-    seq_dict['struct'].append(f'{chai_dir}/pred.model_idx_0.pdb')
+    # seq_dict['struct'].append(f'{chai_dir}/pred.model_idx_0.pdb')
     if chaintarget == 'heavy_chain':
         chain_use = 'A'
     elif chaintarget == 'light_chain':
         chain_use = 'B'
 
-    coul_en, lj_en = lie.lie(f'{chai_dir}/pred.model_idx_0.pdb',
-                        f'{chai_dir}/fixed_0.pdb',
-                        chain_use,
-                        rid_init,
-                        rid_fin,
-                        )
+    # coul_en, lj_en = lie.lie(f'{chai_dir}/pred.model_idx_0.pdb',
+    #                     f'{chai_dir}/fixed_0.pdb',
+    #                     chain_use,
+    #                     rid_init,
+    #                     rid_fin,
+    #                     )
 
-    md_en = md_energy.calculate_md_energy(
-                        f'{chai_dir}/fixed_0.pdb',
-                        )
-    seq_dict['coulen'].append(coul_en)
-    seq_dict['ljen'].append(lj_en)
-    seq_dict['mden'].append(md_en)
-    print(seq_dict)
+    # md_en = md_energy.calculate_md_energy(
+    #                     f'{chai_dir}/fixed_0.pdb',
+    #                     )
+
+    # seq_dict['coulen'].append(coul_en)
+    # seq_dict['ljen'].append(lj_en)
+    # seq_dict['mden'].append(md_en)
+    # print(seq_dict)
     
     '''
     step 4
@@ -125,13 +149,15 @@ def run_pipeline_single(rowit,
     step 4.1
     truncate system to 15 A within cdrloop
     '''
-    residue_mapping = truncate.truncate_pdb(
-                            f'{chai_dir}/pred.model_idx_0.pdb',
-                            f'chain A and resi {rid_init}-{rid_fin}',
-                            f'{chai_dir}/pred_0_truncated.test.pdb',
-                            )
-    print(residue_mapping)
+    # residue_mapping = truncate.truncate_pdb(
+    #                         f'{chai_dir}/pred.model_idx_0.pdb',
+    #                         f'chain A and resi {rid_init}-{rid_fin}',
+    #                         f'{chai_dir}/pred_0_truncated.test.pdb',
+    #                         )
     
+    print("residue mapping is:")
+    print(residue_mapping)
+
     rid_init_truncated = residue_mapping[('A', str(rid_init))]
     rid_fin_truncated = residue_mapping[('A', str(rid_fin))]
 
@@ -139,7 +165,7 @@ def run_pipeline_single(rowit,
     len_light = len_chains.count_residues_in_chain(f'{chai_dir}/pred_0_truncated.pdb', 'B')
     len_ant = len_chains.count_residues_in_chain(f'{chai_dir}/pred_0_truncated.pdb', 'C')
     
-    if False:
+    if True:
         partial_loop.rfdiff_full(
               f'{chai_dir}/pred_0_truncated.pdb',
               rf_dir,
@@ -255,6 +281,7 @@ def run_pipeline_single(rowit,
                             rid_init,
                             rid_fin,
                             )
+
         md_en = md_energy.calculate_md_energy(
                             f'{rf_dir}/chai_struct_{it_f}/fixed_0.pdb',
                             )
@@ -268,14 +295,24 @@ def run_pipeline_single(rowit,
 
 
 
-def run_pipeline(datafile,
+def run_pipeline_parallel(
+                datafile,
                 chai_dir,
                 rf_dir,
-                num_designs):
+                log_dir,
+                res_map_loc,
+                num_designs,
+                gpu_per_node=4):
 
+    '''
+    Initialize mpi rank + device index
+    '''
+
+    comm, size, rank, device_ind =  initialize_mpi(gpu_per_node)
     data = pd.read_csv(datafile)
-    device_ind = 0
     os.environ["CUDA_VISIBLE_DEVICES"] = str(device_ind)
+    os.environ["CHAI_DOWNLOADS_DIR"] = "/lus/eagle/projects/datascience/avasan/Software/CHAI1_downloads"
+
     rf_script_path = "/lus/eagle/projects/datascience/avasan/RFDiffusionProject/RFdiffusion/scripts"
     se3_env = "/lus/eagle/projects/datascience/avasan/envs/SE3nv"
     dlbind_env = "/lus/eagle/projects/datascience/avasan/envs/proteinmpnn_binder_design"
@@ -283,7 +320,9 @@ def run_pipeline(datafile,
     for rowit in range(1):#len(data)):
         # test with heavy_cdr3 without antigen
         chai_dir_it = f'{chai_dir}/{rowit}'
-        rf_dir_it = f'{rf_dir}/{rowit}'
+        rf_dir_it = f'{rf_dir}/{rank}_{rowit}'
+        log_dir_it = f'{log_dir}/{rank}_{rowit}'
+
         try:
             os.mkdir(chai_dir_it)
         except:
@@ -294,22 +333,32 @@ def run_pipeline(datafile,
         except:
             pass
 
+        try:
+            os.mkdir(log_dir_it)
+        except:
+            pass
+
         cdrloop = "heavy_cdr3"
         chaintarget = "heavy_chain"
 
-        seq_dict = run_pipeline_single(rowit,
+        truncated_res_map = truncate.open_resmap(f"{res_map_loc}/resmap_{rowit}.pkl")
+
+        seq_dict = run_pipeline_single(
+                        rowit,
                         data,
                         cdrloop,
                         chaintarget,
                         chai_dir_it,
                         rf_dir_it,
+                        truncated_res_map,
                         rf_script_path,
                         num_designs,
                         se3_env,
                         dlbind_env)
+
         print(seq_dict)
         df_seq = pd.DataFrame(seq_dict)
-        df_seq.to_csv(f'seq_{rowit}.csv', index=False)
+        df_seq.to_csv(f'{log_dir_it}/seq_{rowit}_{cdrloop}.csv', index=False)
 
 
 
@@ -332,14 +381,27 @@ if __name__ =="__main__":
                         type=str,
                         help='directory to store rfdiff output')
 
+    parser.add_argument('-L',
+                        '--logout',
+                        type=str,
+                        help='directory to store log info (seqs, energies)')
+
     parser.add_argument('-N',
                         '--ndesigns',
-                        type=str,
+                        type=int,
+                        required=False,
+                        default=10,
                         help='number of rfdiff designs')
 
-    args = parser.parse_args()
+    parser.add_argument('-G',                              
+                         '--gpunum',
+                         type=int,
+                         required=False,
+                         default=4,
+                         help='number of gpus on a single node')
 
-    #'iedb_tables_pos_and_neg/lp_hl_np_p_ab_data.csv',
+
+    args = parser.parse_args()
 
     try:
         os.mkdir(args.chaiout)
@@ -351,7 +413,16 @@ if __name__ =="__main__":
     except:
         pass
 
-    run_pipeline(args.inputfil,
-                args.chaiout,
-                args.rfout,
-                args.ndesigns)
+    try:                     
+        os.mkdir(args.logout)
+    except:
+        pass
+
+
+    run_pipeline_parallel(
+                    args.inputfil,
+                    args.chaiout,
+                    args.rfout,
+                    args.logout,
+                    args.ndesigns,
+                    gpu_per_node=args.gpunum)
