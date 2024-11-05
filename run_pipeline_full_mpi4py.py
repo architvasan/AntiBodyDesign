@@ -61,6 +61,7 @@ def run_pipeline_single(
                         num_designs,
                         se3_env,
                         dlbind_env,
+                        device_ind
                         ):
 
     seq_dict = {'it': [],
@@ -115,7 +116,8 @@ def run_pipeline_single(
     len_light = len_chains.count_residues_in_chain(f'{chai_dir}/pred_0_truncated.pdb', 'B')
     len_ant = len_chains.count_residues_in_chain(f'{chai_dir}/pred_0_truncated.pdb', 'C')
     
-    if True:
+    print(chai_dir)
+    if False:
         partial_loop.rfdiff_full(
               f'{chai_dir}/pred_0_truncated.pdb',
               rf_dir,
@@ -126,10 +128,12 @@ def run_pipeline_single(
               len_ant,
               rf_script_path,
               se3_env,
+              device_ind,
               partial_steps=10,
               num_designs=num_designs,
               )
 
+    
         '''
         step 4.15
         move any residue with > len(heavy_chain) to chain B + > len(heavy_chain+light_chain) to chain C
@@ -169,7 +173,9 @@ def run_pipeline_single(
         '''
         dlbinder.protein_mpnn(dlbind_env,
                                   '/eagle/projects/datascience/avasan/RFDiffusionProject/dl_binder_design/mpnn_fr',
-                                  rf_dir)
+                                  rf_dir,
+                                  device_ind,
+                            )
 
         '''
         step 6 alternative
@@ -251,8 +257,8 @@ def chai_folding_seq(
                     chaintarget,
                     cdrloop,
                     map_dir,
-                    rank,
-                    comm):
+                    rank):
+                    #comm):
 
     if rank==0:
         data_it = data.loc[rowit]
@@ -309,8 +315,91 @@ def chai_folding_seq(
              'ljen': lj_en,
              'mden': md_en,
              'struct': f'{chai_dir}/pred.model_idx_0.pdb'}         
-        comm.Barrier()
+        #comm.Barrier()
     return seq_dict, residue_mapping
+    
+def run_pipeline_full(
+                datafile,
+                chai_dir,
+                rf_dir,
+                log_dir,
+                res_map_loc,
+                num_designs,
+                gpu_per_node=4,
+                fold_init = False):
+
+    '''
+    Initialize mpi rank + device index
+    '''
+
+    data = pd.read_csv(datafile)
+    #os.environ["CUDA_VISIBLE_DEVICES"] = str(device_ind)
+    os.environ["CHAI_DOWNLOADS_DIR"] = "/lus/eagle/projects/datascience/avasan/Software/CHAI1_downloads"
+
+    rf_script_path = "/lus/eagle/projects/datascience/avasan/RFDiffusionProject/RFdiffusion/scripts"
+    se3_env = "/lus/eagle/projects/datascience/avasan/envs/SE3nv"
+    dlbind_env = "/lus/eagle/projects/datascience/avasan/envs/proteinmpnn_binder_design"
+
+    for rowit in range(1):#len(data)):
+        chai_dir_it = f'{chai_dir}/{rowit}'
+        rf_dir_it = f'{rf_dir}/{rowit}'
+        log_dir_it = f'{log_dir}/{rowit}'
+
+        try:
+            os.mkdir(chai_dir_it)
+        except:
+            pass
+
+        try:
+            os.mkdir(rf_dir_it)
+        except:
+            pass
+
+        try:
+            os.mkdir(log_dir_it)
+        except:
+            pass
+
+        cdrloop = "heavy_cdr3"
+        chaintarget = "heavy_chain"
+
+        print(fold_init)
+        print(chai_dir_it)
+        if fold_init == True:
+            rank = 0
+            seq_dict_init, truncated_res_map = chai_folding_seq(
+                                    data,
+                                    rowit,
+                                    chai_dir,
+                                    chaintarget,
+                                    cdrloop,
+                                    res_map_loc,
+                                    rank)
+                                    #comm)
+            seq_init_df = pd.DataFrame([seq_dict_init])
+            seq_init_df.to_csv(f'{log_dir_it}/seq_initial_{rowit}_{cdrloop}.csv', index=False)
+
+        else:
+            truncated_res_map = truncate.open_resmap(f"{res_map_loc}/resmap_{rowit}.pkl")
+
+        
+        seq_dict = run_pipeline_single(
+                        rowit,
+                        data,
+                        cdrloop,
+                        chaintarget,
+                        chai_dir_it,
+                        rf_dir_it,
+                        truncated_res_map,
+                        rf_script_path,
+                        num_designs,
+                        se3_env,
+                        dlbind_env,
+                        device_ind=0)
+
+        print(seq_dict)
+        df_seq = pd.DataFrame(seq_dict)
+        df_seq.to_csv(f'{log_dir_it}/seq_{rowit}_{cdrloop}.csv', index=False)
     
 def run_pipeline_parallel(
                 datafile,
@@ -327,8 +416,10 @@ def run_pipeline_parallel(
     '''
 
     comm, size, rank, device_ind =  initialize_mpi(gpu_per_node)
+    print(f"rank {rank} of {size}")
     data = pd.read_csv(datafile)
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(device_ind)
+    print(device_ind)
+    #os.environ["CUDA_VISIBLE_DEVICES"] = str(device_ind)
     os.environ["CHAI_DOWNLOADS_DIR"] = "/lus/eagle/projects/datascience/avasan/Software/CHAI1_downloads"
 
     rf_script_path = "/lus/eagle/projects/datascience/avasan/RFDiffusionProject/RFdiffusion/scripts"
@@ -358,7 +449,8 @@ def run_pipeline_parallel(
         cdrloop = "heavy_cdr3"
         chaintarget = "heavy_chain"
 
-        if fold_init == True:
+        print(fold_init)
+        if fold_init == True and rank == 0:
             seq_dict_init, truncated_res_map = chai_folding_seq(
                                     data,
                                     rowit,
@@ -386,13 +478,14 @@ def run_pipeline_parallel(
                         rf_script_path,
                         num_designs,
                         se3_env,
-                        dlbind_env)
+                        dlbind_env,
+                        device_ind=0)
 
         print(seq_dict)
         df_seq = pd.DataFrame(seq_dict)
         df_seq.to_csv(f'{log_dir_it}/seq_{rowit}_{cdrloop}.csv', index=False)
 
-if __name__ =="__main__":
+if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('-i',
@@ -435,7 +528,7 @@ if __name__ =="__main__":
                          help='number of gpus on a single node')
 
     parser.add_argument('-F',                              
-                         '--foldit',
+                         '--foldinit',
                          type=bool,
                          required=False,
                          default=False,
@@ -458,11 +551,12 @@ if __name__ =="__main__":
     except:
         pass
 
-
-    run_pipeline_parallel(
+    run_pipeline_full(
                     args.inputfil,
                     args.chaiout,
                     args.rfout,
                     args.logout,
+                    args.mapdir,
                     args.ndesigns,
-                    gpu_per_node=args.gpunum)
+                    gpu_per_node=args.gpunum,
+                    fold_init = False)#args.foldinit)

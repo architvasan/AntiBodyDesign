@@ -3,6 +3,7 @@ import os
 def protein_mpnn(dlbind_env,
                  mpnn_path,
                  rf_dir,
+                 device_ind,
                  ):
     command = f"""\
               module use /soft/modulefiles &&\

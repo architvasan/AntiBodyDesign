@@ -8,6 +8,7 @@ def pdb2silent(dlbind_env,
     command = f"""\
              module use /soft/modulefiles &&\
              module load conda &&\
+             source ~/.bashrc &&\
              conda activate {dlbind_env} &&\
              {silent_tool_path}/silentfrompdbs\
              {rf_dir}/*.pdb >\
@@ -23,6 +24,7 @@ def extractpdb(localpath,
     command = f"""\
               module use /soft/modulefiles &&\
               module load conda &&\
+              source ~/.bashrc &&\
               cd {rf_dir} &&\
               conda activate {dlbind_env} &&\
               {silent_tool_path}/silentextract\
