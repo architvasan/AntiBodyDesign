@@ -117,7 +117,7 @@ def run_pipeline_single(
     len_ant = len_chains.count_residues_in_chain(f'{chai_dir}/pred_0_truncated.pdb', 'C')
     
     print(chai_dir)
-    if False:
+    if True:
         partial_loop.rfdiff_full(
               f'{chai_dir}/pred_0_truncated.pdb',
               rf_dir,
