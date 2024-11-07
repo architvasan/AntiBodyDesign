@@ -13,6 +13,7 @@ def protein_mpnn(dlbind_env,
               -silent {rf_dir}/rfout.silent\
               -outsilent {rf_dir}/mpnnout.silent\
               -checkpoint_name {rf_dir}/checkpoint_mpnn.dat\
+              -relax_cycles 0\
              """
     os.system(command)
 

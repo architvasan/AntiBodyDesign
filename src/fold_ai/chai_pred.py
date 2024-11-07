@@ -4,6 +4,7 @@ import numpy as np
 import torch
 
 from chai_lab.chai1 import run_inference
+import os
 
 def fold_chai_body_ant(s1,
               s2,
@@ -12,6 +13,8 @@ def fold_chai_body_ant(s1,
               outputdir,
               device=0,
               ):
+
+    os.environ['CHAI_DOWNLOADS_DIR'] = '/lus/eagle/projects/datascience/avasan/Software/CHAI1_downloads'
 
     fasta = f"""
     >protein|name=prot1
@@ -31,7 +34,7 @@ def fold_chai_body_ant(s1,
         output_dir=output_dir,
         # 'default' setup
         num_trunk_recycles=3,
-        num_diffn_timesteps=200,
+        num_diffn_timesteps=80,
         seed=42,
         device=torch.device(f"cuda"),
         use_esm_embeddings=True,

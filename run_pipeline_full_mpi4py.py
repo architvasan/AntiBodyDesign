@@ -260,7 +260,7 @@ def chai_folding_seq(
                     rank):
                     #comm):
 
-    if rank==0:
+    if True:
         data_it = data.loc[rowit]
         data_it_heavy = data_it['heavy_chain']
         data_it_light = data_it['light_chain']
@@ -302,9 +302,9 @@ def chai_folding_seq(
         residue_mapping = truncate.truncate_pdb(
                                 f'{chai_dir}/pred.model_idx_0.pdb',
                                 f'chain A and resi {rid_init}-{rid_fin}',
-                                f'{chai_dir}/pred_0_truncated.test.pdb',
+                                f'{chai_dir}/pred_0_truncated.pdb',
                                 )
-        truncate.save_resmap(residue_mapping, f'{map_dir}/seq_{rowit}_{cdrloop}.csv')
+        truncate.save_resmap(residue_mapping, f'{map_dir}/resmap_0.pkl')
 
         seq_dict = {'it': rowit,
              'chainA': data_it_heavy, 
@@ -344,6 +344,12 @@ def run_pipeline_full(
         chai_dir_it = f'{chai_dir}/{rowit}'
         rf_dir_it = f'{rf_dir}/{rowit}'
         log_dir_it = f'{log_dir}/{rowit}'
+        res_map_loc_it = f'{res_map_loc}/{rowit}'
+
+        try:
+            os.mkdir(res_map_loc_it)
+        except:
+            pass
 
         try:
             os.mkdir(chai_dir_it)
@@ -367,20 +373,21 @@ def run_pipeline_full(
         print(chai_dir_it)
         if fold_init == True:
             rank = 0
+            
             seq_dict_init, truncated_res_map = chai_folding_seq(
                                     data,
                                     rowit,
-                                    chai_dir,
+                                    chai_dir_it,
                                     chaintarget,
                                     cdrloop,
-                                    res_map_loc,
+                                    res_map_loc_it,
                                     rank)
                                     #comm)
             seq_init_df = pd.DataFrame([seq_dict_init])
             seq_init_df.to_csv(f'{log_dir_it}/seq_initial_{rowit}_{cdrloop}.csv', index=False)
 
         else:
-            truncated_res_map = truncate.open_resmap(f"{res_map_loc}/resmap_{rowit}.pkl")
+            truncated_res_map = truncate.open_resmap(f"{res_map_loc_it}/resmap_{rowit}.pkl")
 
         
         seq_dict = run_pipeline_single(
@@ -454,7 +461,7 @@ def run_pipeline_parallel(
             seq_dict_init, truncated_res_map = chai_folding_seq(
                                     data,
                                     rowit,
-                                    chai_dir,
+                                    chai_dir_it,
                                     chaintarget,
                                     cdrloop,
                                     res_map_loc,
@@ -551,6 +558,10 @@ if __name__ == "__main__":
     except:
         pass
 
+    try:
+        os.mkdir(args.mapdir)
+    except:
+        pass
     run_pipeline_full(
                     args.inputfil,
                     args.chaiout,
@@ -559,4 +570,4 @@ if __name__ == "__main__":
                     args.mapdir,
                     args.ndesigns,
                     gpu_per_node=args.gpunum,
-                    fold_init = False)#args.foldinit)
+                    fold_init = True)#args.foldinit)
