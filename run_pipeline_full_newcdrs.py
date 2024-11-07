@@ -466,6 +466,7 @@ def run_pipeline(db_file,
                  chaintarget,
                  cdr_id,
                  output_dir,
+                 designs_per_cdr,
                  local_pwd,
                  rfdiff_scripts,
                  dlbind_helper_scripts,
@@ -505,7 +506,7 @@ def run_pipeline(db_file,
                          mpnn_fr,
                          se3_env,
                          dl_bind_env,
-                         designs_per_cdr=1,
+                         designs_per_cdr=designs_per_cdr,
                          device_ind = device)
 
         df_info = pd.DataFrame(dict_info)
@@ -533,27 +534,43 @@ def run_pipeline(db_file,
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('-i',
+    parser.add_argument('-df',
                         '--dbfil',
                         type=str,
                         help='input csv file with sequences')
 
-    parser.add_argument('-c',
+    parser.add_argument('-cf',
                         '--cdrfil',
                         type=str,
                         help='file with cdr seqs')
     
-    parser.add_argument('-m',
-                        '--mpiyes',
-                        type=bool,
-                        help='use mpi or not?')
+    parser.add_argument('-C',
+                        '--chaintarget',
+                        type=str,
+                        help='file with cdr seqs')
+
+    parser.add_argument('-CD',
+                        '--cdrid',
+                        type=str,
+                        help='file with cdr seqs')
 
     parser.add_argument('-N',
                         '--ndesigns',
                         type=int,
                         required=False,
-                        default=10,
-                        help='number of rfdiff designs')
+                        default=1,
+                        help='number of rfdiff designs per cdr')   
+    
+    parser.add_argument('-O',
+                        '--outdir',
+                        type=str,
+                        required=True,
+                        help='output directory')   
+
+    parser.add_argument('-m',
+                        '--mpiyes',
+                        type=bool,
+                        help='use mpi or not?')
 
     parser.add_argument('-G',                              
                          '--gpunum',
@@ -561,13 +578,6 @@ if __name__ == "__main__":
                          required=False,
                          default=4,
                          help='number of gpus on a single node')
-
-    parser.add_argument('-F',                              
-                         '--foldinit',
-                         type=bool,
-                         required=False,
-                         default=False,
-                         help='should we fold the initial sequence (True) or is it prefolded? (False)')
 
     args = parser.parse_args()
 
@@ -583,32 +593,10 @@ if __name__ == "__main__":
     run_pipeline(args.dbfil,
                  args.cdrfil,
                  args.mpiyes,
-             chaintarget,
-             cdr_id,
-             output_dir,
-             local_pwd,
-             rfdiff_scripts,
-             dlbind_helper_scripts,
-             silenttools_loc,
-             mpnn_fr, 
-             se3_env,
-             dl_bind_env,
-             gpu_per_node=4)
-
-    #'/eagle/projects/datascience/avasan/RFDiffusionProject/dl_binder_design/helper_scripts',
-    #'/eagle/projects/datascience/avasan/RFDiffusionProject/dl_binder_design/include/silent_tools',
-    #'/eagle/projects/datascience/avasan/RFDiffusionProject/dl_binder_design/mpnn_fr'
-
-
-
-
-
-    run_pipeline(db_file,
-                 cdrlistfile,
-                 mpi_yes,
-                 chaintarget,
-                 cdr_id,
-                 output_dir,
+                 args.chaintarget,
+                 args.cdrid,
+                 args.outdir,
+                 args.ndesigns,
                  local_pwd,
                  rfdiff_scripts,
                  dlbind_helper_scripts,
@@ -616,7 +604,8 @@ if __name__ == "__main__":
                  mpnn_fr, 
                  se3_env,
                  dl_bind_env,
-                 gpu_per_node=4)
+                 gpu_per_node=args.gpunum)
+
 
 if False:
     '''
