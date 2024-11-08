@@ -9,7 +9,7 @@ def rfdiff(input_pdb,
            rf_script_path,
            se3_env,
            device_ind,
-           partial_steps=10,
+           partial_steps=5,
            num_designs=1,
            ):
 

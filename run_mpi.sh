@@ -1,37 +1,54 @@
 #!/bin/bash
+#PBS -N rfdiff_14
+#PBS -l select=10
+#PBS -l walltime=1:00:00
+#PBS -q debug-scaling
+#PBS -A datascience
+#PBS -l filesystems=eagle
+#PBS -m abe
+#PBS -M avasan@anl.gov
 
 module use /soft/modulefiles
 module load conda
 
-cd /eagle/datascience/avasan/Simulations/AntiBodyDesign
 conda activate /lus/eagle/projects/datascience/avasan/envs/chai1
 conda env list
 #module load mpiwrappers/cray-mpich-llvm 
+module load PrgEnv-gnu 
+export CRAY_ACCEL_TARGET="nvidia80" 
+export CRAY_TCMALLOC_MEMFS_FORCE="1" 
+export CRAYPE_LINK_TYPE="dynamic" 
+export CRAY_ACCEL_VENDOR="nvidia"
+export CRAY_CPU_TARGET="x86-64"
 
-inputfil=iedb_tables_pos_and_neg/hiv_ab.csv
-chaiout=trials/T1/chaiout
-rfout=trials/T2/rfout
-logout=trials/T2/logout
-resmaploc=trials/T1/resmaps
-numdesign=10
-foldinit=False
-totalrank=4
+trial=14
+cd /eagle/datascience/avasan/Simulations/AntiBodyDesign
+stdout=logs/run_t${trial}.mpi.a3HFM_b4NCO.log
+stderr=logs/run_t${trial}.mpi.a3HFM_b4NCO.err
+NDEPTH=16
+
+data_dir=iedb_tables_pos_and_neg
+output_dir_general=trials/T${trial}_ant3HFM_body4NCO
+log_name=logs/run_t${trial}_a3HFM_b4NCO
+dbfil=fab_lyso.csv
+chaintarget=heavy_chain
+cdrid=heavy_cdr3
+ndesigns=10
+
+totalrank=40
 pernode=4
-stdout=logs/rf_t2.mpi.sophia.log
-stderr=logs/rf_t2.mpi.sophia.err
 
+mkdir $output_dir_general
 
 mpiexec -n $totalrank -ppn $pernode \
-    --depth=8 \
-    --cpu-bind depth \
+    --depth=${NDEPTH} --cpu-bind depth \
     ./set_affinity_gpu_polaris.sh \
-    python run_pipeline_full_mpi4py.py \
-        -i $inputfil \
-        -C $chaiout \
-        -R $rfout \
-        -L $logout \
-        -M $resmaploc \
-        -N $numdesign \
-        -G $pernode \
-        -F $foldinit \
-            > $stdout 2> $stderr
+    /lus/eagle/projects/datascience/avasan/envs/chai1/bin/python run_pipeline_full_newcdrs.py \
+    --dbfil $data_dir/$dbfil \
+    --cdrfil $data_dir/heavy-cdr3_all.json \
+    --chaintarget $chaintarget \
+    --usempi \
+    --cdrid $cdrid \
+    --outdir $output_dir_general \
+    --ndesigns $ndesigns \
+    > $stdout 2> $stderr

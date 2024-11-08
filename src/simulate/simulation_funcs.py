@@ -13,7 +13,7 @@ from sys import stdout
 import pandas as pd
 import numpy as np
 from parmed import load_file, unit as u
-
+from simtk import unit
 '''
 Function to add backbone position restraints
 '''
@@ -71,6 +71,55 @@ def load_amber_files(inpcrd_fil, prmtop_fil):
 
     return system, prmtop, inpcrd
 
+def system_implicit(input_pdb):
+    pdb = PDBFile(input_pdb)
+    forcefield = ForceField('amber14-all.xml', 'implicit/gbn2.xml')
+    system = forcefield.createSystem(pdb.topology,
+                                    soluteDielectric=1.0,
+                                    solventDielectric=80.0,
+                                    hydrogenMass=4*amu,
+                                    constraints=HBonds) 
+                                    #implicitSolventKappa=1.0/nanometer)
+    return system, pdb, forcefield
+
+def sim_implicit(system,
+                pdb,
+                simulation_time, 
+                output_dcd, 
+                output_pdb,
+                d_ind):
+
+    integrator = LangevinMiddleIntegrator(300*kelvin, 1/picosecond, 0.004*picoseconds)
+
+    platform = Platform.getPlatformByName('CUDA')
+    properties = {'DeviceIndex': d_ind, 'Precision': 'mixed'}
+
+    simulation = Simulation(pdb.topology,
+                            system,
+                            integrator,
+                            platform,
+                            properties)
+    
+    simulation.context.setPositions(pdb.positions)
+    simulation.minimizeEnergy()
+    #simulation.reporters.append(PDBReporter('output.pdb', 1000))
+    
+    simulation.reporters.append(StateDataReporter(stdout,
+                                10000,
+                                step=True,
+                                potentialEnergy=True,
+                                speed=True,
+                                temperature=True))
+
+    #simulation.reporters.append(DCDReporter(output_dcd,
+    #                                         10000))
+
+    simulation.reporters.append(PDBReporter(output_pdb,
+                                             simulation_time))
+    simulation.step(simulation_time)
+    state = simulation.context.getState(getEnergy=True)
+    potential_energy = state.getPotentialEnergy()
+    return simulation, potential_energy.value_in_unit(unit.kilocalories_per_mole)
 
 def setup_sim_nomin(system, prmtop, inpcrd, d_ind=0):
     #posres_sys = add_backbone_posres(system, inpcrd.positions, prmtop.topology.atoms(), 0)

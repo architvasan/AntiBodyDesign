@@ -17,7 +17,7 @@ import pandas as pd
 from mpi4py import MPI
 import json
 import numpy as np
-
+from tqdm import tqdm
 '''
 Single rank steps:
 1. Load light + heavy chains into CHAI-1
@@ -211,8 +211,10 @@ def dlbinder_seq_gens(
 
 def newcdr_folding(
                 rf_out,
-                rid_init,
-                rid_fin,
+                rid_init_orig,
+                rid_fin_orig,
+                rid_init_truncated,
+                rid_fin_truncated,
                 seq_A,
                 seq_B,
                 seq_C,
@@ -223,16 +225,16 @@ def newcdr_folding(
     for each pdb with ending *cycle1.pdb:
     use src/utils/seq_frompdb.py
     '''
-    mpnn_pdbs = glob.glob(f"{rf_out}/*cycle*pdb")
+    mpnn_pdbs = glob.glob(f"{rf_out}/*_dldesign_0.pdb")
 
     for it_f, pdb_it in enumerate(mpnn_pdbs):
         '''
         get sequene for each pdb and plug into chai
         '''
-        seq_new = seq_frompdb.get_seq_from_pdb(pdb_it)
-        cdrnew_list = seq_new[0][rid_init:rid_fin]
+        seq_it = seq_frompdb.get_seq_from_pdb(pdb_it)
+        cdrnew_list = seq_it[0][rid_init_truncated:rid_fin_truncated]
         cdrnew = "".join(cdrnew_list)
-        seq_A_new = seq_A[:rid_init] + cdrnew + seq_A[rid_fin:] 
+        seq_A_new = seq_A[:rid_init_orig] + cdrnew + seq_A[rid_fin_orig:] 
         seq_dict['cdrseq'].append(cdrnew)
         try:
             os.mkdir(f'{rf_out}/chai_struct_{it_f}')
@@ -253,8 +255,8 @@ def newcdr_folding(
         coul_en, lj_en, md_en = energy_calcs(f'{rf_out}/chai_struct_{it_f}/pred.model_idx_0.pdb',
                                             f'{rf_out}/chai_struct_{it_f}/fixed_0.pdb',
                                             'A',
-                                            rid_init,
-                                            rid_fin)
+                                            rid_init_orig,
+                                            rid_fin_orig)
         seq_dict['coulen'].append(coul_en)
         seq_dict['ljen'].append(lj_en)
         seq_dict['mden'].append(md_en)
@@ -346,7 +348,6 @@ def full_pipeline_simple(df_db,
                     ant_seq,
                     f'{output_dir}/{rowit}/{it_cdr}/chaiout/temp.fasta',
                     f'{output_dir}/{rowit}/{it_cdr}/chaiout',
-                    device='0',
                     )
             elif chaintarget == 'light_chain':
                 seq_new = light_seq_orig[:rid_init_orig] + cdr + light_seq_orig[rid_fin_orig:]
@@ -356,7 +357,6 @@ def full_pipeline_simple(df_db,
                     ant_seq,
                     f'{output_dir}/{rowit}/{it_cdr}/chaiout/temp.fasta',
                     f'{output_dir}/{rowit}/{it_cdr}/chaiout',
-                    device='0',
                     )
 
             '''
@@ -380,7 +380,10 @@ def full_pipeline_simple(df_db,
             dict_info['coulen'].append(coul_en)
             dict_info['ljen'].append(lj_en)
             dict_info['mden'].append(md_en)
-            if it_cdr % 10 ==0:
+            print(dict_info)
+            if it_cdr % 2 == 0:
+                df_info = pd.DataFrame(dict_info)
+                df_info.to_csv(f'{output_dir}/{rowit}/diff_cdr_results.csv')
                 print(dict_info)
             
             '''
@@ -391,7 +394,7 @@ def full_pipeline_simple(df_db,
                 to within 15 A of selection
             '''
             chai_truncated_pdb = f'{output_dir}/{rowit}/{it_cdr}/chaiout/pred_0_truncated.pdb'
-            truncation_sel = f'chain A and resi {rid_init_new}-{rid_fin_new}',
+            truncation_sel = f'chain A and resi {rid_init_new}-{rid_fin_new}'
             resmap_outfile = f'{output_dir}/{rowit}/{it_cdr}/resmaps/resmap_0.pkl'
 
             residue_mapping,\
@@ -441,6 +444,8 @@ def full_pipeline_simple(df_db,
             if chaintarget=='heavy_chain':
                 dict_info = newcdr_folding(
                                         f'{output_dir}/{rowit}/{it_cdr}/rfout',
+                                        rid_init_new,
+                                        rid_fin_new,
                                         rid_init_truncated,
                                         rid_fin_truncated,
                                         seq_new,
@@ -451,6 +456,8 @@ def full_pipeline_simple(df_db,
             elif chaintarget=='light_chain':
                 dict_info = newcdr_folding(
                                         f'{output_dir}/{rowit}/{it_cdr}/rfout',
+                                        rid_init_new,
+                                        rid_fin_new,
                                         rid_init_truncated,
                                         rid_fin_truncated,
                                         seq_new,
@@ -458,6 +465,12 @@ def full_pipeline_simple(df_db,
                                         ant_seq,
                                         dict_info,
                                         )
+
+            if it_cdr % 2 == 0:
+                df_info = pd.DataFrame(dict_info)
+                df_info.to_csv(f'{output_dir}/{rowit}/diff_cdr_results.csv')
+                print(dict_info)
+
     return dict_info 
 
 def run_pipeline(db_file,
@@ -474,11 +487,12 @@ def run_pipeline(db_file,
                  mpnn_fr, 
                  se3_env,
                  dl_bind_env,
-                 gpu_per_node=4):
+                 gpu_per_node=4,
+                 device = 0):
 
     df_db = pd.read_csv(db_file)
     with open(cdrlistfile, 'r') as file:
-        cdrlist = json.load(file) 
+        cdrlist = json.load(file)['all_train_sequences'] 
     try:
         os.mkdir(output_dir)
     except:
@@ -486,24 +500,26 @@ def run_pipeline(db_file,
     if mpi_yes:
         comm, size, rank, device = initialize_mpi(gpu_per_node)
         cdrlist_rank = np.array_split(cdrlist, int(size))[int(rank)]
+        print(f"rank:{rank}, device:{device}")
         try:
             os.mkdir(f'{output_dir}/{rank}')
         except:
             pass
 
+        #print(device)
         os.environ["CUDA_VISIBLE_DEVICES"] = str(device)
         os.environ["CHAI_DOWNLOADS_DIR"] = "/lus/eagle/projects/datascience/avasan/Software/CHAI1_downloads"
-
+        print(os.environ["CUDA_VISIBLE_DEVICES"])
         dict_info = full_pipeline_simple(df_db,
                          cdrlist_rank,
                          chaintarget,
                          cdr_id,
                          f'{output_dir}/{rank}',
-                         local_pwd,
                          rfdiff_scripts,
                          dlbind_helper_scripts,
                          silenttools_loc,
                          mpnn_fr,
+                         local_pwd,
                          se3_env,
                          dl_bind_env,
                          designs_per_cdr=designs_per_cdr,
@@ -512,17 +528,18 @@ def run_pipeline(db_file,
         df_info = pd.DataFrame(dict_info)
         df_info.to_csv(f'{output_dir}/{rank}/df_cdrs_energies.csv')
     else:
-        device = 0
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(device)
+        os.environ["CHAI_DOWNLOADS_DIR"] = "/lus/eagle/projects/datascience/avasan/Software/CHAI1_downloads" 
         dict_info = full_pipeline_simple(df_db,
-                         cdrlist_rank,
+                         cdrlist,
                          chaintarget,
                          cdr_id,
                          f'{output_dir}',
-                         local_pwd,
                          rfdiff_scripts,
                          dlbind_helper_scripts,
                          silenttools_loc,
                          mpnn_fr,
+                         local_pwd,
                          se3_env,
                          dl_bind_env,
                          designs_per_cdr=1,
@@ -567,11 +584,6 @@ if __name__ == "__main__":
                         required=True,
                         help='output directory')   
 
-    parser.add_argument('-m',
-                        '--mpiyes',
-                        type=bool,
-                        help='use mpi or not?')
-
     parser.add_argument('-G',                              
                          '--gpunum',
                          type=int,
@@ -579,9 +591,20 @@ if __name__ == "__main__":
                          default=4,
                          help='number of gpus on a single node')
 
+    parser.add_argument('-D',                              
+                         '--device',
+                         type=int,
+                         required=False,
+                         default=0,
+                         help='device to run on, default: 0')
+
+   # Flag that turns on when used (True if specified, False if omitted)
+    parser.add_argument('--usempi',
+                        action='store_true',
+                        help="Use mpi?")
+ 
     args = parser.parse_args()
 
-    rfdiff_scripts = ""
     rfdiff_scripts = "/lus/eagle/projects/datascience/avasan/RFDiffusionProject/RFdiffusion/scripts"
     se3_env = "/lus/eagle/projects/datascience/avasan/envs/SE3nv"
     dl_bind_env = "/lus/eagle/projects/datascience/avasan/envs/proteinmpnn_binder_design"
@@ -592,7 +615,7 @@ if __name__ == "__main__":
     
     run_pipeline(args.dbfil,
                  args.cdrfil,
-                 args.mpiyes,
+                 args.usempi,
                  args.chaintarget,
                  args.cdrid,
                  args.outdir,
@@ -604,7 +627,8 @@ if __name__ == "__main__":
                  mpnn_fr, 
                  se3_env,
                  dl_bind_env,
-                 gpu_per_node=args.gpunum)
+                 gpu_per_node=args.gpunum,
+                 device=args.device)
 
 
 if False:

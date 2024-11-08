@@ -6,5 +6,4 @@ pdb_downloads/
 et
 run_mpi_sophia.1.sh 
 run_mpi_sophia.sh 
-set_affinity_gpu_polaris.sh 
 test_mpi.py
