@@ -7,3 +7,12 @@ et
 run_mpi_sophia.1.sh 
 run_mpi_sophia.sh 
 test_mpi.py
+rfdiff_14.e3076085
+rfdiff_14.o3076085
+rfdiff.e3075984
+rfdiff.o3075984
+run_pipeline_full_newcdrs.py
+run_parallel_node0.sh
+run_parallel_node1.sh
+run_mpi_double_long.sh
+run_mpi_prod.sh

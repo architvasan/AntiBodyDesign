@@ -18,7 +18,7 @@ import argparse
 
 def running(input_pdb, simulation_time, output_dcd, d_ind): 
     system, pdb, forcefield = system_implicit(input_pdb)
-    simulation, integrator = sim_implicit(
+    simulation, potential_energy = sim_implicit(
                                         system,
                                         pdb,
                                         simulation_time,

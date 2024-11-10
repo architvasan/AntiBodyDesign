@@ -311,6 +311,13 @@ def full_pipeline_simple(df_db,
         light_seq_orig = df_it['light_chain']    
         ant_seq = df_it['antigen']
         orig_cdr_seq = df_it[cdr_id]
+
+        try:
+            if len(cdr_list) < 2:
+                print(cdr_list)
+                cdr_list.extend(cdr_list)
+        except:
+            pass
         
         if chaintarget == 'heavy_chain':
             rid_init_orig = heavy_seq_orig.find(orig_cdr_seq)

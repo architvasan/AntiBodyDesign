@@ -78,8 +78,8 @@ def system_implicit(input_pdb):
                                     soluteDielectric=1.0,
                                     solventDielectric=80.0,
                                     hydrogenMass=4*amu,
-                                    constraints=HBonds) 
-                                    #implicitSolventKappa=1.0/nanometer)
+                                    constraints=HBonds, 
+                                    implicitSolventKappa=1.0/nanometer)
     return system, pdb, forcefield
 
 def sim_implicit(system,
@@ -87,6 +87,7 @@ def sim_implicit(system,
                 simulation_time, 
                 output_dcd, 
                 output_pdb,
+                out_log,
                 d_ind):
 
     integrator = LangevinMiddleIntegrator(300*kelvin, 1/picosecond, 0.004*picoseconds)
@@ -104,18 +105,19 @@ def sim_implicit(system,
     simulation.minimizeEnergy()
     #simulation.reporters.append(PDBReporter('output.pdb', 1000))
     
-    simulation.reporters.append(StateDataReporter(stdout,
+    simulation.reporters.append(StateDataReporter(
+                                out_log,
                                 10000,
-                                step=True,
                                 potentialEnergy=True,
                                 speed=True,
-                                temperature=True))
+                                ))
 
-    #simulation.reporters.append(DCDReporter(output_dcd,
-    #                                         10000))
+    simulation.reporters.append(DCDReporter(output_dcd,
+                                             25000))
 
     simulation.reporters.append(PDBReporter(output_pdb,
                                              simulation_time))
+
     simulation.step(simulation_time)
     state = simulation.context.getState(getEnergy=True)
     potential_energy = state.getPotentialEnergy()
