@@ -6,6 +6,7 @@ import numpy as np
 from tqdm import tqdm
 import src.simulate.simulation_funcs as sfuncs
 import os
+from mpi4py import MPI
 
 def simulate_struct(
                     input_pdb,
@@ -52,23 +53,154 @@ def find_fixed_pdb_and_generate_variable(pattern,
     
     return result
 
-output_dir = 'trials/T14_ant3HFM_body4NCO_simulations'
-try:
-    os.mkdir(output_dir)
-except:
-    pass
+def simulate_pipeline(
+                     df_paths,
+                     output_dir,
+                     simulation_time=250000,
+                     gpu_per_node=4,
+                     use_mpi=False,
+                      ):
+    '''
+    1. load in df of paths for all pdbs to simulate
+    2. Split list of "fixed" pdbs across multi ranks
+    3. Iterate over list of pdbs on each rank
+      and simulate each structure
+    4. Write to logfile potential energy
+    5. Figure out how to extract cdr loop info from each structure. 
+        Can just go to directory, get cdr loop from .csv file
+        Then find the rid and rfin for that cdr in the original chai file
+        And use this rid and rfin to identify the cdr in the new file
+    '''
+    if use_mpi:
+        comm = MPI.COMM_WORLD
+        size = comm.Get_size()
+        rank = comm.Get_rank()
+        device = str(rank % gpu_per_node)
 
-# Usage
-output_files = find_fixed_pdb_and_generate_variable()
-print(output_files)
-for variable_name, pdb_path in output_files.items():
-    print(f"{variable_name}: {pdb_path}")
+        df_paths_chunks = np.array_split(df_paths,
+                                         size)
+        df_paths_rank = df_paths_chunks[rank]
+        print(df_paths_rank)
+    else:
+        df_paths_rank = df_paths
+        device = "0"
 
-df = pd.DataFrame(list(output_files.items()),
-                   columns = ['VariableName', 'Location'])
+    structures = []
+    potential_energies = []
+    for rowit in tqdm(range(len(df_paths_rank))):
+        df_it = df_paths_rank.iloc[rowit]
+        output_name_it = df_it['VariableName']
+        pdb_path_it = df_it['Location']
+        out_dcd = f'{output_dir}/{output_name_it}.dcd'
+        out_pdb = f'{output_dir}/{output_name_it}.pdb'
+        out_log = f'{output_dir}/{output_name_it}.log'
+        pot_en = simulate_struct(
+                    pdb_path_it,
+                    simulation_time,
+                    out_dcd,
+                    out_pdb,
+                    out_log,
+                    device,
+                    )
+        structures.append(out_pdb)
+        potential_energies.append(pot_en)
+    
+    return structures, potential_energies
 
-df.to_csv('t14_pdbs_save_loc.csv', index=False)
+if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-df',
+                        '--df_paths',
+                        type=str,
+                        help='input csv file with paths of pdbs')
 
+    parser.add_argument('-o',
+                        '--output_dir',
+                        type=str,
+                        help='output_dir with all \
+                              outputted dcds + pdbs')
+    
+    parser.add_argument('-t',
+                        '--time_sim',
+                        type=int,
+                        required=False,
+                        default=250000,
+                        help='time for simulation')
+    
+    parser.add_argument('-g',
+                        '--gnode',
+                        type=int,
+                        required=False,
+                        default=4,
+                        help='gpus per node')
+
+    parser.add_argument('--usempi',
+                        action='store_true',
+                        help="Use mpi?")
+
+    args = parser.parse_args()
+
+    try:
+        os.mkdir(args.output_dir)
+    except:
+        pass
+
+    df_paths = pd.read_csv(args.df_paths)
+    simulate_pipeline(
+                     df_paths,
+                     args.output_dir,
+                     simulation_time=args.time_sim,
+                     gpu_per_node=args.gnode,
+                     use_mpi=args.usempi,
+                      )
+
+if False:
+    output_dir = 'trials/T14_ant3HFM_body4NCO_simulations'
+    try:
+        os.mkdir(output_dir)
+    except:
+        pass
+    
+    # Usage
+    output_files = find_fixed_pdb_and_generate_variable('fixed.pdb',
+                                             'T14')
+    
+    df = pd.DataFrame(list(output_files.items()),
+                       columns = ['VariableName', 'Location'])
+    output_files_rf_out =find_fixed_pdb_and_generate_variable('fixed_0.pdb',
+                                             'T14') 
+    df_rfout = pd.DataFrame(list(output_files_rf_out.items()),
+                       columns = ['VariableName', 'Location'])
+    
+    
+    output_files_T9_rfout = find_fixed_pdb_and_generate_variable(
+                                'fixed_0.pdb',
+                                'T9',
+                                directory='trials/T9_ant3HFM_body4NCO')
+    
+    df_t9_rfout = pd.DataFrame(list(output_files_T9_rfout.items()),
+                       columns = ['VariableName', 'Location'])
+    
+    output_files_T10_rfout = find_fixed_pdb_and_generate_variable(
+                                'fixed_0.pdb',
+                                'T10',
+                                directory='trials/T10_ant3HFM_body4NCO')
+    
+    df_t10_rfout = pd.DataFrame(list(output_files_T10_rfout.items()),
+                       columns = ['VariableName', 'Location'])
+    
+    df = pd.concat([df, df_rfout, df_t9_rfout, df_t10_rfout])
+    df.to_csv('all_pdbs_save_loc.csv', index=False)
+
+if False:
+    comm = MPI.COMM_WORLD
+    size = comm.Get_size()
+    rank = comm.Get_rank()
+    device = rank % gpu_per_node
+    chunks = np.array_split(df, 3)
+
+#cdrlist_rank = np.array_split(cdrlist, int(size))[int(rank)]
 
 
 

@@ -14,7 +14,6 @@ import src.analyze.md_energy as md_energy
 import src.utils.truncate as truncate
 import src.utils.len_chains_pdb as len_chains
 import pandas as pd
-from mpi4py import MPI
 import json
 import numpy as np
 from tqdm import tqdm
@@ -46,6 +45,7 @@ set CUDA Visible device according to rank
 '''
 
 def initialize_mpi(gpu_per_node):
+    from mpi4py import MPI
     comm = MPI.COMM_WORLD
     size = comm.Get_size()
     rank = comm.Get_rank()
@@ -549,7 +549,7 @@ def run_pipeline(db_file,
                          local_pwd,
                          se3_env,
                          dl_bind_env,
-                         designs_per_cdr=1,
+                         designs_per_cdr=designs_per_cdr,
                          device_ind = device)
         df_info = pd.DataFrame(dict_info)
         df_info.to_csv(f'{output_dir}/df_cdrs_energies.csv')
