@@ -30,17 +30,22 @@ def energy(context, solute_coulomb_scale, solute_lj_scale, solvent_coulomb_scale
     return context.getState(getEnergy=True, groups={0}).getPotentialEnergy()
 
 def lie(inppdb,
-        fixedpdb,
         sel_chain,
         sel_rst,
         sel_rend,
         ref_chain):
 
     #pdb = PDBFile('fixed_structure.pdb')
-    pdbfixit(inppdb, fixedpdb)
-    pdb = PDBFile(fixedpdb)
-    forcefield = ForceField('amber14-all.xml', 'amber14/tip3pfb.xml')
-    system = forcefield.createSystem(pdb.topology, nonbondedMethod=CutoffNonPeriodic)
+    #pdbfixit(inppdb, fixedpdb)
+    pdb = PDBFile(inppdb)
+    #forcefield = ForceField('amber14-all.xml', 'amber14/tip3pfb.xml')
+    #system = forcefield.createSystem(pdb.topology, nonbondedMethod=CutoffNonPeriodic)
+
+    forcefield = ForceField('amber14-all.xml', 'implicit/gbn2.xml')
+    #system = forcefield.createSystem(pdb.topology, nonbondedMethod=CutoffNonPeriodic)
+    system = forcefield.createSystem(pdb.topology,
+                                    soluteDielectric=1.0,
+                                    solventDielectric=80.0)
 
     solvent = set([a.index for a in pdb.topology.atoms() if a.residue.chain.id == sel_chain and int(a.residue.id)>sel_rst and int(a.residue.id)<sel_rend])
     protein = set([a.index for a in pdb.topology.atoms() if a.residue.chain.id == ref_chain])
@@ -80,7 +85,10 @@ def lie(inppdb,
     solvent_lj = energy(context, 0, 0, 0, 1)
     coul_final = total_coulomb - solute_coulomb - solvent_coulomb
     lj_final = total_lj - solute_lj - solvent_lj
-    return coul_final, lj_final 
+    del(pdb)
+    del(system)
+    del(forcefield)
+    return coul_final.value_in_unit(kilocalories_per_mole), lj_final.value_in_unit(kilocalories_per_mole)
 
 
 if __name__ == "__main__": 

@@ -38,9 +38,12 @@ def lie(inppdb,
     #pdb = PDBFile('fixed_structure.pdb')
     pdbfixit(inppdb, fixedpdb)
     pdb = PDBFile(fixedpdb)
-    forcefield = ForceField('amber14-all.xml', 'amber14/tip3pfb.xml')
-    system = forcefield.createSystem(pdb.topology, nonbondedMethod=CutoffNonPeriodic)
-
+    #forcefield = ForceField('amber14-all.xml', 'amber14/tip3pfb.xml')
+    forcefield = ForceField('amber14-all.xml', 'implicit/gbn2.xml')
+    #system = forcefield.createSystem(pdb.topology, nonbondedMethod=CutoffNonPeriodic)
+    system = forcefield.createSystem(pdb.topology,
+                                    soluteDielectric=1.0,
+                                    solventDielectric=80.0)
     solvent = set([a.index for a in pdb.topology.atoms() if a.residue.chain.id == sel_chain and int(a.residue.id)>sel_rst and int(a.residue.id)<sel_rend])
     protein = set([a.index for a in pdb.topology.atoms() if a.index not in solvent])
         

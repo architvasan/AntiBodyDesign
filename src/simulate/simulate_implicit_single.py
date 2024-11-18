@@ -20,14 +20,14 @@ from tqdm import tqdm
 import os
 
 def running(input_pdb, simulation_time, output_dcd, d_ind): 
-    system, pdb, forcefield = system_implicit(input_pdb)
-    simulation, potential_energy = sim_implicit(
+    system, pdb, forcefield = sfuncs.system_implicit(input_pdb)
+    simulation, potential_energy = sfuncs.sim_implicit(
                                         system,
                                         pdb,
                                         simulation_time,
                                         output_dcd,
                                         f'{output_dcd}.pdb',
-                                        f'simulation.log',
+                                        f'{output_dcd}.log',
                                         d_ind
                                         )
     return
@@ -112,65 +112,8 @@ def simulate_pipeline(
     return structures, potential_energies
 
 
-if __name__ == '__main__':
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-df',
-                        '--df_paths',
-                        type=str,
-                        help='input csv file with paths of pdbs')
 
-    parser.add_argument('-o',
-                        '--output_dir',
-                        type=str,
-                        help='output_dir with all \
-                              outputted dcds + pdbs')
-    
-    parser.add_argument('-t',
-                        '--time_sim',
-                        type=int,
-                        required=False,
-                        default=250000,
-                        help='time for simulation')
-    
-    parser.add_argument('-g',
-                        '--gnode',
-                        type=int,
-                        required=False,
-                        default=4,
-                        help='gpus per node')
-
-    parser.add_argument('-D',
-                        '--device',
-                        type=str,
-                        required=False,
-                        default=0,
-                        help='device')
-
-
-    parser.add_argument('--usempi',
-                        action='store_true',
-                        help="Use mpi?")
-
-    args = parser.parse_args()
-
-    try:
-        os.mkdir(args.output_dir)
-    except:
-        pass
-
-    df_paths = pd.read_csv(args.df_paths)
-    simulate_pipeline(
-                     df_paths,
-                     args.output_dir,
-                     simulation_time=args.time_sim,
-                     gpu_per_node=args.gnode,
-                     use_mpi=args.usempi,
-                     device=args.device,
-                      )
-
-if False:
-
+if True:
     if __name__ == "__main__": 
         parser = argparse.ArgumentParser()
         

@@ -11,9 +11,7 @@ def calc_cont(u, selection1, selection2, cutoff=3.5):
     chain_A = u.select_atoms(selection1)
     chain_B = u.select_atoms(selection2)
     res_A = sorted(list(set([res.resid for res in chain_A])))
-    print(res_A)
     res_B = sorted(list(set([res.resid for res in chain_B])))
-    print(res_B)
     #res_conts_A = np.zeros(len(res_A)+1)#{}
     #res_conts_B = np.zeros(len(res_B)+1)#{}
     #cont_A_B_res = np.zeros((len(res_A)+1, len(res_B)+1))
@@ -23,7 +21,7 @@ def calc_cont(u, selection1, selection2, cutoff=3.5):
     B_start = res_B[0]
     del chain_B
 
-    for ts in tqdm(u.trajectory):
+    for ts in (u.trajectory):
         contacts_total_ts = 0
         chain_B = u.select_atoms(f"{selection2} and around {cutoff} ({selection1})") 
         # Calculate the pairwise distances between all atoms in chain A and chain B
@@ -47,6 +45,7 @@ def calc_cont(u, selection1, selection2, cutoff=3.5):
         del chain_B
         conts_per_frame.append(contacts_total_ts)
     
+    print(conts_per_frame)
     return conts_per_frame
 
 def main(inputpdb, 
@@ -63,7 +62,7 @@ def main(inputpdb,
     conts_per_frame = calc_cont(u, sel_A, sel_B, threshold)
     # Select the two chains by their chain identifiers (e.g., 'A' and 'B')
     
-    np.savetxt(out_contacts_per_frame, conts_per_frame)
+    #np.savetxt(out_contacts_per_frame, conts_per_frame)
 
 
     return conts_per_frame

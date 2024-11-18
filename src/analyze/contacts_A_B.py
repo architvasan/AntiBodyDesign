@@ -2,8 +2,17 @@ import MDAnalysis as mda
 from MDAnalysis.lib.mdamath import make_whole
 from MDAnalysis.lib.util import unique_int_1d
 from MDAnalysis.analysis.distances import distance_array
+from MDAnalysis.analysis.hbonds import HydrogenBondAnalysis
 import numpy as np
 from tqdm import tqdm
+
+def calculate_hbonds(universe, selection1="protein", selection2="resname SOL", distance=3.0, angle=150.0):
+    """Calculate hydrogen bonds between two selections in the universe."""
+    hbond_analysis = HydrogenBondAnalysis(universe, selection1=selection1, selection2=selection2, 
+                                          distance=distance, angle=angle)
+    hbond_analysis.run()
+    hbond_pairs = [(hbond[1], hbond[2]) for hbond in hbond_analysis.hbonds]  # Get pairs of acceptor-donor indices
+    return hbond_pairs
 
 def calc_rid_cont(u, selection1, selection2, cutoff=3.5):
 

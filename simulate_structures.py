@@ -1,12 +1,10 @@
 import os
 import pandas as pd
-from mpi4py import MPI
 import json
 import numpy as np
 from tqdm import tqdm
 import src.simulate.simulation_funcs as sfuncs
 import os
-from mpi4py import MPI
 
 def simulate_struct(
                     input_pdb,
@@ -72,6 +70,7 @@ def simulate_pipeline(
         And use this rid and rfin to identify the cdr in the new file
     '''
     if use_mpi:
+        from mpi4py import MPI
         comm = MPI.COMM_WORLD
         size = comm.Get_size()
         rank = comm.Get_rank()
