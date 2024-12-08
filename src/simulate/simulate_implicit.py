@@ -92,20 +92,26 @@ def simulate_pipeline(
     structures = []
     potential_energies = []
     for rowit in tqdm(range(len(df_paths_rank))):
+        
         df_it = df_paths_rank.iloc[rowit]
         output_name_it = df_it['VariableName']
         pdb_path_it = df_it['Location']
         out_dcd = f'{output_dir}/{output_name_it}.dcd'
         out_pdb = f'{output_dir}/{output_name_it}.pdb'
         out_log = f'{output_dir}/{output_name_it}.log'
-        pot_en = simulate_struct(
-                    pdb_path_it,
-                    simulation_time,
-                    out_dcd,
-                    out_pdb,
-                    out_log,
-                    device,
-                    )
+
+        try:
+            pot_en = simulate_struct(
+                        pdb_path_it,
+                        simulation_time,
+                        out_dcd,
+                        out_pdb,
+                        out_log,
+                        device,
+                        )
+        except:
+            pot_en = 0
+
         structures.append(out_pdb)
         potential_energies.append(pot_en)
     

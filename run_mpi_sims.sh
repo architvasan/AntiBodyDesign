@@ -44,7 +44,7 @@ mpirun -n $totalrank -ppn $pernode \
     --depth=${NDEPTH} --cpu-bind depth \
     /lus/eagle/projects/datascience/avasan/envs/chai1/bin/python simulate_structures.py \
     -df all_pdbs_save_loc.csv -o trials/T9_10_14_antdy4NCO_simulations/ --usempi \
-    > > $stdout 2> $stderr
+    > $stdout 2> $stderr
 
 
 #mpiexec -n $totalrank -ppn $pernode \
